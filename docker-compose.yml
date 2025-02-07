@@ -1,0 +1,64 @@
+services:
+  web-app:
+    build: ./web-app  # This directory should contain your Java app Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/mydb
+      - AWS_ENDPOINT=http://localstack:4566
+      - AZURE_STORAGE_ENDPOINT=http://azurite:10000/devstoreaccount1
+    depends_on:
+      - postgres
+      - localstack
+      - azurite
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf # Mount the config file
+    depends_on:
+      - localstack
+      - azurite
+      - web-app
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  localstack:
+    image: localstack/localstack:latest
+    ports:
+      - "4566:4566"  # Main gateway for AWS services
+      - "4571:4571"  # Alternative port for some services, if needed
+    environment:
+      - SERVICES=s3,ec2,dynamodb  # Choose the services you want to emulate
+      - DEFAULT_REGION=us-east-1
+    volumes:
+      - "./localstack:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    ports:
+      - "10000:10000"  # Blob service
+      - "10001:10001"  # Queue service (if needed)
+    command: "azurite-blob --blobHost 0.0.0.0 --location /data --debug /dev/stdout"
+    volumes:
+      - azurite-data:/data
+
+volumes:
+  pgdata:
+  azurite-data:
